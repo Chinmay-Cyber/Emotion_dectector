@@ -14,7 +14,7 @@ A real-time facial emotion recognition system built with TensorFlow and MobileNe
 ## Project Structure
 
 ```
-emotion_detector_v2.ipynb   # Main notebook (training + inference)
+emotion_detector.ipynb   # Main notebook (training + inference)
 best_emotion_model_v2.keras # Saved model checkpoint (generated after training)
 results/
   confusion_matrix.png      # Confusion matrix heatmap
