@@ -1,55 +1,123 @@
-# Real-Time Facial Emotion Detection Using CNN and OpenCV
+# Emotion Detector v2
 
-This repository features an end-to-end machine learning pipeline that detects human facial expressions in real-time. The project utilizes a custom **Deep Convolutional Neural Network (CNN)** built with TensorFlow/Keras to classify emotions and leverages **OpenCV's Haar Cascade** classifier for live face tracking via webcam.
+A real-time facial emotion recognition system built with TensorFlow and MobileNetV2. Detects 7 emotions from a webcam feed using transfer learning and MTCNN face detection.
 
----
+## Features
 
-## 🚀 Features
+- Classifies 7 emotions: **angry, disgust, fear, happy, neutral, sad, surprise**
+- Two-phase transfer learning with a MobileNetV2 backbone (pretrained on ImageNet)
+- Handles class imbalance via computed class weights
+- Real-time webcam inference using MTCNN face detection
+- Color-coded bounding boxes per emotion with confidence scores and a top-3 overlay
+- Saves training history plots and a confusion matrix to `results/`
 
-- **Automated Data Processing:** Loads, grayscales, resizes ($48 \times 48$ pixels), and normalizes images efficiently.
-- **Data Augmentation:** Features on-the-fly image transformations (rotation, zoom, horizontal flips) during training to mitigate overfitting.
-- **Deep CNN Architecture:** Implements a powerful network structure utilizing multi-layered convolutions, Batch Normalization, Max Pooling, and Dropout for robust feature extraction.
-- **Live Frame-Optimized Inference:** Intercepts real-time webcam video feeds, processes faces every 3rd frame to optimize performance, and draws dynamic bounding boxes with real-time accuracy percentages.
+## Project Structure
 
----
+```
+emotion_detector_v2.ipynb   # Main notebook (training + inference)
+best_emotion_model_v2.keras # Saved model checkpoint (generated after training)
+results/
+  confusion_matrix.png      # Confusion matrix heatmap
+  training_history.png      # Accuracy & loss curves across both phases
+```
 
-## 📊 Model Architecture
+## Requirements
 
-The deep neural network is sequentially structured with increasing filter sizes to learn hierarchical facial representations:
+```
+tensorflow
+scikit-learn
+numpy
+matplotlib
+seaborn
+opencv-python
+mtcnn
+```
 
-| Layer (Type) | Configuration | Hyperparameters / Activation |
-| :--- | :--- | :--- |
-| **Convolutional Block 1** | 2x Conv2D (64 filters, $3 \times 3$) | ReLU, Batch Normalization, MaxPool ($2 \times 2$), Dropout (0.25) |
-| **Convolutional Block 2** | 2x Conv2D (128 filters, $3 \times 3$) | ReLU, Batch Normalization, MaxPool ($2 \times 2$), Dropout (0.25) |
-| **Convolutional Block 3** | 2x Conv2D (256 filters, $3 \times 3$) | ReLU, Batch Normalization, MaxPool ($2 \times 2$), Dropout (0.25) |
-| **Fully Connected Block** | Flatten $\rightarrow$ Dense (512) $\rightarrow$ Dense (256) | ReLU, Batch Normalization, Dropout (0.5) |
-| **Output Layer** | Dense (7) | Softmax |
+Install everything at once:
 
-### Training Configuration
-- **Optimizer:** Adam (Learning Rate: 0.001)
-- **Loss Function:** `sparse_categorical_crossentropy`
-- **Callbacks Hooked:** - `ModelCheckpoint` (Saves the absolute highest `val_accuracy` model configuration to `best_emotion_model.keras`)
-  - `EarlyStopping` (Monitors validation loss with a patience of 10 epochs)
-  - `ReduceLROnPlateau` (Halves the learning rate when validation loss plateaus for 5 epochs)
+```bash
+pip install tensorflow scikit-learn numpy matplotlib seaborn opencv-python mtcnn
+```
 
----
+A CUDA-capable GPU is recommended for training but not required for inference.
 
-## 📂 Dataset Setup
+## Dataset Setup
 
-To train this pipeline, set up your project directory structure as follows:
+The notebook expects your dataset organised into per-emotion subfolders:
 
-```text
-├── Emotion_dataset/
-│   ├── train/
-│   │   ├── angry/
-│   │   ├── disgust/
-│   │   ├── fear/
-│   │   ├── happy/
-│   │   ├── neutral/
-│   │   ├── sad/
-│   │   └── surprise/
-│   └── test/
-│       ├── angry/
-│       └── ... (same subfolders as training set)
-├── Haar_code.ipynb
-└── README.md
+```
+train/
+  angry/
+  disgust/
+  fear/
+  happy/
+  neutral/
+  sad/
+  surprise/
+test/
+  angry/
+  ...
+```
+
+Set `TRAIN_PATH` and `TEST_PATH` in **Cell 3** to point to your local folders. The [FER-2013](https://www.kaggle.com/datasets/msambare/fer2013) dataset (48×48 grayscale, ~35k images) works out of the box.
+
+## Usage
+
+### Training
+
+Open `emotion_detector_v2.ipynb` and run cells in order:
+
+1. **Cell 2** – imports and GPU check
+2. **Cell 3** – set your paths and hyperparameters
+3. **Cells 4–5** – load images and compute class weights
+4. **Cell 6** – build the MobileNetV2 model
+5. **Cell 7** – configure data augmentation
+6. **Cell 8** – Phase 1: train the classification head (backbone frozen, 50 epochs max)
+7. **Cell 9** – Phase 2: fine-tune the full model (backbone unfrozen, lower LR)
+8. **Cells 10–11** – evaluate and save plots
+
+The best checkpoint is saved automatically to `best_emotion_model_v2.keras` based on validation accuracy.
+
+### Real-Time Detection
+
+Run **Cell 12** after training (or point `MODEL_PATH` to an existing checkpoint). Press `q` to quit the webcam window.
+
+```python
+MODEL_PATH = 'best_emotion_model_v2.keras'  # update if needed
+```
+
+## Model Architecture
+
+| Component | Detail |
+|---|---|
+| Backbone | MobileNetV2 (ImageNet weights, frozen in Phase 1) |
+| Pooling | GlobalAveragePooling2D |
+| Head | Dense 256 → BN → Dropout 0.4 → Dense 128 → BN → Dropout 0.3 → Softmax |
+| Phase 1 LR | 0.001 (head only) |
+| Phase 2 LR | 1e-5 (full model) |
+| Input size | 48 × 48 × 3 |
+| Batch size | 64 |
+
+Early stopping and `ReduceLROnPlateau` are applied in both phases to prevent overfitting.
+
+## Training Details
+
+- **Augmentation:** random rotation (±15°), zoom (15%), horizontal flip, shift (10%), brightness jitter (0.8–1.2×)
+- **Class imbalance:** handled with `sklearn.utils.class_weight.compute_class_weight`
+- **Face detection (inference):** MTCNN with confidence threshold 0.90, run every 5 frames for performance
+
+## Configuration
+
+All key hyperparameters are in **Cell 3**:
+
+| Variable | Default | Description |
+|---|---|---|
+| `IMG_SIZE` | 48 | Input image resolution |
+| `BATCH_SIZE` | 64 | Training batch size |
+| `EPOCHS` | 100 | Max epochs for Phase 2 |
+| `MODEL_PATH` | `best_emotion_model_v2.keras` | Checkpoint save path |
+| `RESULTS_DIR` | `results` | Output directory for plots |
+
+## License
+
+MIT
