@@ -1,4 +1,4 @@
-# Emotion Detector v2
+# Emotion Detector 
 
 A real-time facial emotion recognition system built with TensorFlow and MobileNetV2. Detects 7 emotions from a webcam feed using transfer learning and MTCNN face detection.
 
